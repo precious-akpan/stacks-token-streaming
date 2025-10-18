@@ -76,17 +76,17 @@
 (define-read-only (calculate-block-delta (timeframe {
 	start-block: uint,
 	stop-block: uint,
-}))
+}) (current-block uint))
 	(let (
 			(start-block (get start-block timeframe))
 			(stop-block (get stop-block timeframe))
-			(delta (if (<= block-height start-block)
+			(delta (if (<= current-block start-block)
 				;; then
 				u0
 				;; else
-				(if (< block-height stop-block)
+				(if (< current-block stop-block)
 					;; then
-					(- block-height start-block)
+					(- current-block start-block)
 					;; else
 					(- stop-block start-block)
 				)
@@ -103,7 +103,7 @@
 	)
 	(let (
 			(stream (unwrap! (map-get? streams stream-id) u0))
-			(block-delta (calculate-block-delta (get timeframe stream)))
+			(block-delta (calculate-block-delta (get timeframe stream) block-height))
 			(recipient-balance (* block-delta (get payment-per-block stream)))
 		)
 		(if (is-eq who (get recipient stream))
@@ -179,5 +179,40 @@
 	)
 	(is-eq (principal-of? (unwrap! (secp256k1-recover? hash signature) false))
 		(ok signer)
+	)
+)
+
+;; Update stream configuration
+(define-public (update-details
+		(stream-id uint)
+		(payment-per-block uint)
+		(timeframe {
+			start-block: uint,
+			stop-block: uint,
+		})
+		(signer principal)
+		(signature (buff 65))
+	)
+	(let ((stream (unwrap! (map-get? streams stream-id) ERR_INVALID_STREAM_ID)))
+		(asserts!
+			(validate-signature (hash-stream stream-id payment-per-block timeframe)
+				signature signer
+			)
+			ERR_INVALID_SIGNATURE
+		)
+		(asserts!
+			(or
+				(and (is-eq (get sender stream) contract-caller) (is-eq (get recipient stream) signer))
+				(and (is-eq (get sender stream) signer) (is-eq (get recipient stream) contract-caller))
+			)
+			ERR_UNAUTHORIZED
+		)
+		(map-set streams stream-id
+			(merge stream {
+				payment-per-block: payment-per-block,
+				timeframe: timeframe,
+			})
+		)
+		(ok true)
 	)
 )
