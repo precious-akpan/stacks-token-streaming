@@ -13,4 +13,3 @@ costs-reports.json
 node_modules
 .idea
 .vscode
-*.toml
